@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>GH by rkh</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>GH</h1>
+<p>Layered GitHub API client</p>
+        <p class="view"><a href="https://github.com/rkh/gh">View the Project on GitHub <small>rkh/gh</small></a></p>
+        <ul>
+          <li><a href="https://github.com/rkh/gh/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/rkh/gh/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/rkh/gh">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <p>This is a highly flexible, layered, low-level GitHub client library, trying to get out of your way and let you get to the GitHub data as simple as possible. Unless you add layers, you will end up with Hashes and Arrays. The approach and API should be familiar from projects like Rack or Faraday.</p>
+
+<p>Simple example:</p>
+
+<div class="highlight">
+<pre><span class="nb">require</span> <span class="s1">'gh'</span>
+<span class="nb">puts</span> <span class="no">GH</span><span class="o">[</span><span class="s1">'users/rkh'</span><span class="o">][</span><span class="s1">'name'</span><span class="o">]</span>
+</pre>
+</div>
+
+
+<p>This will by default use all the middleware that ships with GH, in the following order</p>
+
+<ul>
+<li>
+<code>GH::Remote</code> - sends HTTP requests to GitHub and parses the response</li>
+<li>
+<code>GH::Normalizer</code> - renames fields consistenly, adds hypermedia links if possible</li>
+<li>
+<code>GH::Cache</code> - caches the responses (will use Rails cache if in Rails, in-memory cache otherwise)</li>
+<li>
+<code>GH::LazyLoader</code> - will load missing fields when accessed (handy for dealing with incomplete data without sending to many requests)</li>
+<li>
+<code>GH::LinkFollower</code> - will add content of hypermedia links as fields (lazyly), allows you to traverse relations</li>
+</ul><h3>Main Entry Points</h3>
+
+<p>Every layer has two main entry points:</p>
+
+<ul>
+<li>
+<code>[key]</code> - loads data from GitHub</li>
+<li>
+<code>load(data)</code> - takes data and applies modifications (handy for dealing with service hook payloads)</li>
+</ul><p>These two methods are exposed by any instance of a layer and the <code>GH</code> constant.</p>
+
+<h3>Using a Single Layer</h3>
+
+<p>You can initialize and use any layer on its own:</p>
+
+<div class="highlight">
+<pre><span class="n">gh</span> <span class="o">=</span> <span class="no">GH</span><span class="o">::</span><span class="no">Remote</span><span class="o">.</span><span class="n">new</span>
+<span class="nb">puts</span> <span class="n">gh</span><span class="o">[</span><span class="s1">'users/rkh'</span><span class="o">][</span><span class="s1">'name'</span><span class="o">]</span>
+</pre>
+</div>
+
+
+<p>Layers know which other layer they should usually wrap (<code>Remote</code> wraps no other layer, <code>LazyLoader</code> and <code>LinkFollower</code> wrap <code>Normalizer</code> by default, anything else wraps <code>Remote</code>), so you can initialize them right away:</p>
+
+<div class="highlight">
+<pre><span class="n">gh</span> <span class="o">=</span> <span class="no">GH</span><span class="o">::</span><span class="no">LazyLoader</span><span class="o">.</span><span class="n">new</span>
+</pre>
+</div>
+
+
+<p>You can also pass the layer that should be wrapped as an argument:</p>
+
+<div class="highlight">
+<pre><span class="n">gh</span> <span class="o">=</span> <span class="no">GH</span><span class="o">::</span><span class="no">LazyLoader</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="no">GH</span><span class="o">::</span><span class="no">LinkFollower</span><span class="o">.</span><span class="n">new</span><span class="p">)</span>
+</pre>
+</div>
+
+
+<h3>Creating Your Own Stack</h3>
+
+<p>For convinience a stack DSL is provided:</p>
+
+<div class="highlight">
+<pre><span class="c1"># Same as GH::Normalizer.new(GH::Cache.new)</span>
+<span class="n">gh</span> <span class="o">=</span> <span class="no">GH</span><span class="o">::</span><span class="no">Stack</span><span class="o">.</span><span class="n">build</span> <span class="k">do</span>
+  <span class="n">use</span> <span class="no">GH</span><span class="o">::</span><span class="no">Normalizer</span>
+  <span class="n">use</span> <span class="no">GH</span><span class="o">::</span><span class="no">Cache</span>
+<span class="k">end</span>
+
+<span class="nb">puts</span> <span class="n">gh</span><span class="o">[</span><span class="s1">'users/rkh'</span><span class="o">][</span><span class="s1">'name'</span><span class="o">]</span>
+</pre>
+</div>
+
+
+<p>You can also create reusable <code>Stack</code> instances:</p>
+
+<div class="highlight">
+<pre><span class="n">stack</span> <span class="o">=</span> <span class="no">GH</span><span class="o">::</span><span class="no">Stack</span><span class="o">.</span><span class="n">new</span> <span class="k">do</span>
+  <span class="n">use</span> <span class="no">GH</span><span class="o">::</span><span class="no">Normalizer</span>
+  <span class="n">use</span> <span class="no">GH</span><span class="o">::</span><span class="no">Cache</span>
+<span class="k">end</span>
+
+<span class="n">gh</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">build</span> <span class="n">username</span><span class="p">:</span> <span class="s1">'rkh'</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="s1">'abc123'</span>
+<span class="nb">puts</span> <span class="n">gh</span><span class="o">[</span><span class="s1">'user'</span><span class="o">][</span><span class="s1">'name'</span><span class="o">]</span>
+</pre>
+</div>
+
+
+<p>One such instance (with the standard setup) can be accessed as <code>GH::DefaultStack</code></p>
+
+<h3>Scoping</h3>
+
+<p>With the main goal to separate authentication from other logic, the <code>gh</code> library supports scopting:</p>
+
+<div class="highlight">
+<pre><span class="no">GH</span><span class="o">.</span><span class="n">with</span> <span class="no">GH</span><span class="o">::</span><span class="no">LazyLoader</span><span class="o">.</span><span class="n">new</span> <span class="k">do</span>
+  <span class="nb">puts</span> <span class="no">GH</span><span class="o">[</span><span class="s1">'users/rkh'</span><span class="o">][</span><span class="s1">'name'</span><span class="o">]</span>
+<span class="k">end</span>
+</pre>
+</div>
+
+
+<p>That way, you could create a stack with, for instance, an <a href="http://developer.github.com/v3/oauth/">access token</a>:</p>
+
+<div class="highlight">
+<pre><span class="n">authenticated</span> <span class="o">=</span> <span class="no">GH</span><span class="o">::</span><span class="no">DefaultStack</span> <span class="n">token</span><span class="p">:</span> <span class="s1">'e72e16c7e42f292c6912e7710c838347ae178b4a'</span>
+
+<span class="no">GH</span><span class="o">.</span><span class="n">with</span><span class="p">(</span><span class="n">authenticated</span><span class="p">)</span> <span class="k">do</span>
+  <span class="c1"># ...</span>
+<span class="k">end</span>
+</pre>
+</div>
+
+
+<p>Since this is rather common, you can pass options directly to <code>with</code>:</p>
+
+<div class="highlight">
+<pre><span class="no">GH</span><span class="o">.</span><span class="n">with</span><span class="p">(</span><span class="n">username</span><span class="p">:</span> <span class="s1">'rkh'</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="s1">'abc123'</span><span class="p">)</span> <span class="k">do</span>
+  <span class="c1"># ...</span>
+<span class="k">end</span>
+</pre>
+</div>
+
+
+<p>Scoping is thread-safe.</p>
+
+<h3>Is this production ready?</h3>
+
+<p>I hope so, we use it in production for <a href="http://travis-ci.org/">Travis CI</a>. The work on this library has been funded by the <a href="https://love.travis-ci.org/">Travis Love Campaign</a>.</p>
+
+<h3>History</h3>
+
+<ul>
+<li>2012-04-10: 0.2.2 - improved link following</li>
+<li>2012-04-10: 0.2.1 - bug fix release</li>
+<li>2012-04-10: 0.2.0 - added link following plus bug fixes (mainly encoding issues)</li>
+<li>2012-04-06: 0.1.2 - bug fix release (issues with cache reloading)</li>
+<li>2012-04-06: 0.1.1 - bug fix release (DSL fixes)</li>
+<li>2012-04-04: 0.1.0 - many bug fixes plus lazy loading</li>
+<li>2012-03-21: 0.0.1 - first public release</li>
+<li>2012-03-05: project started</li>
+</ul>
+      </section>
+    </div>
+    <footer>
+      <p>Project maintained by <a href="https://github.com/rkh">rkh</a></p>
+      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
+    </footer>
+    <!--[if !IE]><script>fixScale(document);</script><!--<![endif]-->
+    
+  </body>
+</html>
